@@ -135,17 +135,30 @@ export function useHlsPlayer({
 
                 // Manifest Parsed Handler
                 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    // Check for HEVC
+                    // Filter HEVC levels: prefer H.264 for compatibility
                     if (hls) {
                         const levels = hls.levels;
                         if (levels && levels.length > 0) {
-                            const hasHEVC = levels.some(level =>
-                                level.videoCodec?.toLowerCase().includes('hev') ||
-                                level.videoCodec?.toLowerCase().includes('h265')
-                            );
+                            const h264Indices: number[] = [];
+                            let hasHEVC = false;
+                            levels.forEach((level, index) => {
+                                const codec = level.videoCodec?.toLowerCase() || '';
+                                if (codec.includes('hev') || codec.includes('h265') || codec.includes('hvc')) {
+                                    hasHEVC = true;
+                                } else {
+                                    h264Indices.push(index);
+                                }
+                            });
                             if (hasHEVC) {
-                                console.warn('[HLS] ⚠️ HEVC detected');
-                                onError?.('检测到 HEVC/H.265 编码，当前浏览器可能不支持');
+                                if (h264Indices.length > 0) {
+                                    // H.264 alternatives exist — lock to first H.264 level
+                                    console.info('[HLS] HEVC detected, using H.264 level for compatibility');
+                                    hls.currentLevel = h264Indices[0];
+                                } else {
+                                    // All levels are HEVC — warn user
+                                    console.warn('[HLS] ⚠️ All levels are HEVC, browser may not support');
+                                    onError?.('检测到 HEVC/H.265 编码，当前浏览器可能不支持');
+                                }
                             }
                         }
                     }
